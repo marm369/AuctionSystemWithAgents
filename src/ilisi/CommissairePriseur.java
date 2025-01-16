@@ -18,12 +18,50 @@ public class CommissairePriseur extends Agent {
     protected void setup() {
         JFrame frame = new JFrame("Commissaire-Priseur");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(400, 300);
+        frame.setSize(500, 400);
+        frame.setLayout(new BorderLayout());
+
         textArea = new JTextArea();
         textArea.setEditable(false);
-        frame.add(new JScrollPane(textArea), BorderLayout.CENTER);
+        textArea.setFont(new Font("Consolas", Font.PLAIN, 14));
+        textArea.setBackground(new Color(245, 245, 245)); 
+        textArea.setForeground(new Color(44, 62, 80)); 
+    
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setBorder(BorderFactory.createTitledBorder("Journal des enchères"));
+        frame.add(scrollPane, BorderLayout.CENTER);
+   
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
+        bottomPanel.setBackground(new Color(236, 240, 241)); 
+
+        JButton startAuctionButton = new JButton("Nouvelle enchère");
+        startAuctionButton.setFont(new Font("Arial", Font.BOLD, 14));
+        startAuctionButton.setBackground(new Color(46, 204, 113)); 
+        startAuctionButton.setForeground(Color.WHITE);
+        startAuctionButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        startAuctionButton.setFocusPainted(false);
+
+        startAuctionButton.addActionListener(e -> {
+            if (!auctionInProgress) {
+                lancerAppelOffres();
+                auctionInProgress = true;
+            } else {
+                JOptionPane.showMessageDialog(frame, 
+                    "Une enchère est déjà en cours.", 
+                    "Erreur", 
+                    JOptionPane.WARNING_MESSAGE);
+            }
+        });
+
+        bottomPanel.add(startAuctionButton);
+        frame.add(bottomPanel, BorderLayout.SOUTH);
+
+      
+        frame.setLocationRelativeTo(null); 
         frame.setVisible(true);
 
+        
         addBehaviour(new CyclicBehaviour() {
             @Override
             public void action() {
@@ -31,7 +69,7 @@ public class CommissairePriseur extends Agent {
                 if (msg != null) {
                     switch (msg.getPerformative()) {
                         case ACLMessage.REQUEST:
-                            textArea.append("Requête reçue du Vendeur : " + msg.getContent() + "\n");
+                            afficherMessage("Requête reçue du Vendeur : " + msg.getContent());
                             if (!auctionInProgress) {
                                 auctionInProgress = true;
                                 lancerAppelOffres();
@@ -39,22 +77,11 @@ public class CommissairePriseur extends Agent {
                             break;
 
                         case ACLMessage.PROPOSE:
-                            try {
-                                String bidder = msg.getSender().getLocalName();
-                                double price = Double.parseDouble(msg.getContent());
-                                offers.put(bidder, price);
-                                textArea.append("Offre reçue de " + bidder + ": " + price + "\n");
-
-                                if (offers.size() >= 3) { 
-                                    annoncerGagnant();
-                                }
-                            } catch (NumberFormatException e) {
-                                textArea.append("Erreur : Offre non valide reçue.\n");
-                            }
+                            traiterProposition(msg);
                             break;
 
                         default:
-                            textArea.append("Message non pris en charge : " + msg.getContent() + "\n");
+                            afficherMessage("Message non pris en charge : " + msg.getContent());
                             break;
                     }
                 } else {
@@ -65,7 +92,7 @@ public class CommissairePriseur extends Agent {
     }
 
     private void lancerAppelOffres() {
-        textArea.append("Appel d'offres envoyé aux acheteurs.\n");
+        afficherMessage("Appel d'offres envoyé aux acheteurs.");
         ACLMessage cfp = new ACLMessage(ACLMessage.CFP);
         cfp.addReceiver(getAID("Acheteur1"));
         cfp.addReceiver(getAID("Acheteur2"));
@@ -74,9 +101,24 @@ public class CommissairePriseur extends Agent {
         send(cfp);
     }
 
+    private void traiterProposition(ACLMessage msg) {
+        try {
+            String bidder = msg.getSender().getLocalName();
+            double price = Double.parseDouble(msg.getContent());
+            offers.put(bidder, price);
+            afficherMessage("Offre reçue de " + bidder + ": " + price);
+
+            if (offers.size() >= 3) { 
+                annoncerGagnant();
+            }
+        } catch (NumberFormatException e) {
+            afficherMessage("Erreur : Offre non valide reçue.");
+        }
+    }
+
     private void annoncerGagnant() {
         if (offers.isEmpty()) {
-            textArea.append("Aucune offre reçue. Enchère terminée sans gagnant.\n");
+            afficherMessage("Aucune offre reçue. Enchère terminée sans gagnant.");
             auctionInProgress = false;
             return;
         }
@@ -88,7 +130,7 @@ public class CommissairePriseur extends Agent {
         if (bestOffer != null) {
             String winner = bestOffer.getKey();
             double winningPrice = bestOffer.getValue();
-            textArea.append("Le gagnant est " + winner + " avec une offre de " + winningPrice + ".\n");
+            afficherMessage("Le gagnant est " + winner + " avec une offre de " + winningPrice + ".");
 
             ACLMessage winnerMsg = new ACLMessage(ACLMessage.INFORM);
             winnerMsg.addReceiver(getAID(winner));
@@ -98,5 +140,12 @@ public class CommissairePriseur extends Agent {
 
         auctionInProgress = false;
         offers.clear();
+    }
+
+    private void afficherMessage(String message) {
+        SwingUtilities.invokeLater(() -> {
+            textArea.append(message + "\n");
+            textArea.setCaretPosition(textArea.getDocument().getLength()); 
+        });
     }
 }
